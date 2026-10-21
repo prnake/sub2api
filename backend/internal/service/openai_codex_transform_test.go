@@ -1536,7 +1536,10 @@ func TestApplyCodexOAuthTransform_CodexCLI_PreservesExistingInstructions(t *test
 }
 
 func TestApplyCodexOAuthTransform_CodexCLI_SuppliesDefaultWhenEmpty(t *testing.T) {
-	// Codex CLI 场景：无 instructions 时补充默认值
+	// Codex CLI 场景：无 instructions 时补充默认值（需显式开启部署级填充开关）
+	prev := codexDefaultInstructionsEnabled
+	codexDefaultInstructionsEnabled = true
+	t.Cleanup(func() { codexDefaultInstructionsEnabled = prev })
 
 	reqBody := map[string]any{
 		"model": "gpt-5.1",
@@ -1552,6 +1555,10 @@ func TestApplyCodexOAuthTransform_CodexCLI_SuppliesDefaultWhenEmpty(t *testing.T
 }
 
 func TestApplyCodexOAuthTransform_GPT55SuppliesModelSpecificInstructions(t *testing.T) {
+	prev := codexDefaultInstructionsEnabled
+	codexDefaultInstructionsEnabled = true
+	t.Cleanup(func() { codexDefaultInstructionsEnabled = prev })
+
 	reqBody := map[string]any{
 		"model":        "gpt-5.5",
 		"instructions": "   ",
@@ -1567,6 +1574,11 @@ func TestApplyCodexOAuthTransform_GPT55SuppliesModelSpecificInstructions(t *test
 }
 
 func TestApplyCodexOAuthTransform_GPT6AstraSuppliesModelSpecificInstructions(t *testing.T) {
+	// 本用例检验"开启填充后的上游行为"：默认关闭的部署级开关需显式打开。
+	prev := codexDefaultInstructionsEnabled
+	codexDefaultInstructionsEnabled = true
+	t.Cleanup(func() { codexDefaultInstructionsEnabled = prev })
+
 	reqBody := map[string]any{
 		"model": "gpt-6-astra",
 	}
@@ -2198,4 +2210,40 @@ func TestFilterCodexInput_PreservesReasoningInMixedInput(t *testing.T) {
 			require.Equal(t, "fc_1", byType["function_call_output"][0]["call_id"])
 		})
 	}
+}
+
+func TestCodexDefaultInstructionsGate(t *testing.T) {
+	newBody := func() map[string]any {
+		return map[string]any{
+			"model": "gpt-6.1-sol",
+			"input": []any{
+				map[string]any{
+					"type":    "message",
+					"role":    "user",
+					"content": "hello",
+				},
+			},
+		}
+	}
+
+	t.Run("default off: empty instructions are not filled", func(t *testing.T) {
+		prev := codexDefaultInstructionsEnabled
+		codexDefaultInstructionsEnabled = false
+		t.Cleanup(func() { codexDefaultInstructionsEnabled = prev })
+
+		reqBody := newBody()
+		applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{})
+		require.NotContains(t, reqBody, "instructions")
+	})
+
+	t.Run("enabled: upstream fill behavior restored", func(t *testing.T) {
+		prev := codexDefaultInstructionsEnabled
+		codexDefaultInstructionsEnabled = true
+		t.Cleanup(func() { codexDefaultInstructionsEnabled = prev })
+
+		reqBody := newBody()
+		applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{})
+		require.Contains(t, reqBody, "instructions")
+		require.NotEmpty(t, reqBody["instructions"])
+	})
 }

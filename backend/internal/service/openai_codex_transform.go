@@ -5,10 +5,26 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 )
+
+// GATEWAY_CODEX_DEFAULT_INSTRUCTIONS 控制是否在请求未携带 instructions（或为空）
+// 时自动填充默认 Codex base instructions。上游行为是默认填充（会给调用方带来
+// 一段隐藏的 ~4k token 前缀并计入其用量/计费）；本部署默认关闭，设为
+// "true"/"1"/"yes"/"on" 可恢复上游填充行为。
+var codexDefaultInstructionsEnabled = gatewayEnvFlagOn("GATEWAY_CODEX_DEFAULT_INSTRUCTIONS")
+
+// gatewayEnvFlagOn 判断部署级布尔环境变量是否被显式置为开启值。
+func gatewayEnvFlagOn(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "true", "1", "yes", "on":
+		return true
+	}
+	return false
+}
 
 var codexModelMap = map[string]string{
 	"gpt-6.1-sol":          "gpt-6.1-sol",
@@ -302,8 +318,10 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 		result.Modified = true
 	}
 
-	// instructions 处理逻辑：根据是否是 Codex CLI 分别调用不同方法
-	if !opts.SkipDefaultInstructions && applyInstructions(reqBody, opts.IsCodexCLI) {
+	// instructions 处理逻辑：根据是否是 Codex CLI 分别调用不同方法。
+	// 部署级开关 GATEWAY_CODEX_DEFAULT_INSTRUCTIONS 默认关闭，空 instructions
+	// 不再被静默填充（避免隐藏前缀与用量膨胀）；显式开启后恢复上游行为。
+	if !opts.SkipDefaultInstructions && codexDefaultInstructionsEnabled && applyInstructions(reqBody, opts.IsCodexCLI) {
 		result.Modified = true
 	}
 	if isCodexSparkModel(normalizedModel) && applyCodexSparkImageUnsupportedInstructions(reqBody) {
