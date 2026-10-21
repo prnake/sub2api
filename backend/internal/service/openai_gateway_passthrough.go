@@ -163,7 +163,9 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			})
 			return nil, fmt.Errorf("openai passthrough rejected before upstream: %s", rejectReason)
 		}
-		if isOpenAICodexModel(reqModel) && !gjson.GetBytes(body, "instructions").Exists() {
+		// 部署级开关 GATEWAY_CODEX_DEFAULT_INSTRUCTIONS 默认关闭：空 instructions
+		// 不再被静默填充默认 Codex 提示词（见 openai_codex_transform.go）。
+		if codexDefaultInstructionsEnabled && isOpenAICodexModel(reqModel) && !gjson.GetBytes(body, "instructions").Exists() {
 			nextBody, setErr := sjson.SetBytes(body, "instructions", defaultCodexSynthInstructions(reqModel))
 			if setErr != nil {
 				return nil, fmt.Errorf("set passthrough codex instructions: %w", setErr)

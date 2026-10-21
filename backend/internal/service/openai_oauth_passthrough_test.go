@@ -890,6 +890,11 @@ func TestOpenAIGatewayService_OAuthPassthrough_UpstreamRequestIgnoresClientCance
 func TestOpenAIGatewayService_OAuthPassthrough_CodexMissingInstructionsGetsDefault(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	// 本用例检验"开启填充后的上游行为"：默认关闭的部署级开关需显式打开。
+	prev := codexDefaultInstructionsEnabled
+	codexDefaultInstructionsEnabled = true
+	t.Cleanup(func() { codexDefaultInstructionsEnabled = prev })
+
 	for _, stream := range []bool{false, true} {
 		t.Run(fmt.Sprintf("stream=%t", stream), func(t *testing.T) {
 			rec := httptest.NewRecorder()
@@ -938,6 +943,12 @@ func TestOpenAIGatewayService_OAuthPassthrough_CodexMissingInstructionsGetsDefau
 
 func TestOpenAIGatewayService_Forward_MissingInstructionsUsesMappedModelTemplate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+
+	// 本用例检验"开启填充后的上游行为"：默认关闭的部署级开关需显式打开。
+	prev := codexDefaultInstructionsEnabled
+	codexDefaultInstructionsEnabled = true
+	t.Cleanup(func() { codexDefaultInstructionsEnabled = prev })
+
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
